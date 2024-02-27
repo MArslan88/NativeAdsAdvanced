@@ -1,11 +1,13 @@
 package com.mhdarslan.nativeadsadvanced;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.RatingBar;
 import android.widget.TextView;
@@ -14,17 +16,23 @@ import android.widget.Toast;
 import com.google.android.gms.ads.AdListener;
 import com.google.android.gms.ads.AdLoader;
 import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.VideoOptions;
 import com.google.android.gms.ads.formats.MediaView;
 import com.google.android.gms.ads.formats.UnifiedNativeAd;
-import com.google.android.gms.ads.formats.UnifiedNativeAdView;
 import com.google.android.gms.ads.initialization.InitializationStatus;
 import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
+import com.google.android.gms.ads.nativead.NativeAd;
+import com.google.android.gms.ads.nativead.NativeAdOptions;
+import com.google.android.gms.ads.nativead.NativeAdView;
 
 public class MainActivity extends AppCompatActivity {
 
     private Button refreshButton;
     private UnifiedNativeAd nativeAd;
+
+    private NativeAd mNativeAd;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,47 +57,62 @@ public class MainActivity extends AppCompatActivity {
 
     }
     private void refreshAd(){
-        refreshButton.setEnabled(false);
-
-        AdLoader.Builder builder = new AdLoader.Builder(this, getString(R.string.native_advanced_ad_unit_id));
-        builder.forUnifiedNativeAd(new UnifiedNativeAd.OnUnifiedNativeAdLoadedListener() {
+        AdLoader.Builder adBuilder = new AdLoader.Builder(this, getResources().getString(R.string.native_advanced_ad_unit_id));
+        adBuilder.forNativeAd(new NativeAd.OnNativeAdLoadedListener() {
             @Override
-            public void onUnifiedNativeAdLoaded(UnifiedNativeAd unifiedNativeAd) {
-                if(nativeAd != null)
-                    nativeAd = unifiedNativeAd;
-                CardView cardView = findViewById(R.id.ad_container);
-                UnifiedNativeAdView adView = (UnifiedNativeAdView) getLayoutInflater().inflate(R.layout.native_ad_layout,null);
-                populateNativeAd(unifiedNativeAd,adView);
-                cardView.removeAllViews();
-                cardView.addView(adView);
-
-                refreshButton.setEnabled(true);
+            public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
+                if(isDestroyed() || isFinishing() || isChangingConfigurations()){
+                    nativeAd.destroy();
+                    return;
+                }
+                if(mNativeAd != null){
+                    mNativeAd.destroy();
+                }
+                mNativeAd = nativeAd;
+                FrameLayout adFrameLayout = findViewById(R.id.frameNativeAd);
+                NativeAdView adView = (NativeAdView) getLayoutInflater().inflate(R.layout.native_ad_layout, null);
+                populateNativeAd(nativeAd, adView);
+                adFrameLayout.removeAllViews();
+                adFrameLayout.addView(adView);
             }
         });
 
-        AdLoader adLoader = builder.withAdListener(new AdListener(){
+        VideoOptions videoOptions = new VideoOptions.Builder().setStartMuted(true).build();
+        NativeAdOptions nativeAdOptions = new NativeAdOptions.Builder().setVideoOptions(videoOptions).build();
+        AdLoader adLoader = adBuilder.withAdListener(new AdListener() {
             @Override
-            public void onAdFailedToLoad(int i) {
-                refreshButton.setEnabled(true);
-                Toast.makeText(MainActivity.this, "Failed to load ad.", Toast.LENGTH_SHORT).show();
-                super.onAdFailedToLoad(i);
+            public void onAdClicked() {
+                super.onAdClicked();
+            }
+
+            @Override
+            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                super.onAdFailedToLoad(loadAdError);
+                Toast.makeText(MainActivity.this, "Ad load error: " + loadAdError, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onAdLoaded() {
+                super.onAdLoaded();
+                Toast.makeText(MainActivity.this, "Ad loaded", Toast.LENGTH_SHORT).show();
             }
         }).build();
 
         adLoader.loadAd(new AdRequest.Builder().build());
+
     }
 
-    private void populateNativeAd(UnifiedNativeAd nativeAd, UnifiedNativeAdView adView){
+    private void populateNativeAd(NativeAd nativeAd, NativeAdView adView){
         adView.setHeadlineView(adView.findViewById(R.id.ad_headline));
         adView.setAdvertiserView(adView.findViewById(R.id.ad_advertiser));
         adView.setBodyView(adView.findViewById(R.id.ad_body_text));
         adView.setStarRatingView(adView.findViewById(R.id.star_rating));
-        adView.setMediaView((MediaView) adView.findViewById(R.id.media_view));
+//        adView.setMediaView((MediaView) adView.findViewById(R.id.media_view));
         adView.setCallToActionView(adView.findViewById(R.id.add_call_to_action));
         adView.setIconView(adView.findViewById(R.id.adv_icon));
 
-        adView.getMediaView().setMediaContent(nativeAd.getMediaContent());
-        ((TextView) adView.getHeadlineView()).setText(nativeAd.getHeadline());
+//        adView.getMediaView().setMediaContent(nativeAd.getMediaContent());
+//        ((TextView) adView.getHeadlineView()).setText(nativeAd.getHeadline());
 
         if(nativeAd.getBody() == null){
             adView.getBodyView().setVisibility(View.INVISIBLE);
@@ -127,10 +150,4 @@ public class MainActivity extends AppCompatActivity {
         adView.setNativeAd(nativeAd);
     }
 
-    @Override
-    protected void onDestroy() {
-        if(nativeAd != null)
-            nativeAd.destroy();
-        super.onDestroy();
-    }
 }
